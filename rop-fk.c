@@ -25,7 +25,9 @@ char* op_out;
 char* op_in;
 char* op_lb;
 char* op_rb;
+
 char* op_fin;
+char* op_next;
 
 void debug_buf(char* name, char* exec, int len) {
 	printf("%s: [", name);
@@ -50,7 +52,7 @@ void print_stack() {
 
 void print_ret() {
 	print_stack();
-	printf(">> Returning to %p\n",  __builtin_return_address(2));
+	printf(">> Returning to %p\n",  __builtin_return_address(1));
 }
 
 void write_instr(char* instr) {
@@ -88,6 +90,8 @@ void next() {
 			write_instr(op_fin); break;
 	}
 
+	write_instr(op_next);
+
 	if(DEBUG) { 
 		printf("Next: %d", next_op);
 		print_ret();	
@@ -105,35 +109,28 @@ void move_right() {
 	}
 
 	stack_pos++;
-	next();
 }
 
 void move_left(){
 	stack_pos--;
-	next();
 }
 
 void increment(){
 	stack[stack_pos]++;
-	next();
 }
 
 void decrement(){
 	stack[stack_pos]--;
-	next();
 }
 
 void output(){
 	int val = stack[stack_pos];
 	printf("%c", (char) val);
-	// printf("Out: %d\n", val);
-	next();
 }
 
 void input(){
 	int c = getchar();
-	stack[stack_pos] = c;	
-	next();
+	stack[stack_pos] = c;
 }
 
 void left_square(){
@@ -141,8 +138,6 @@ void left_square(){
 	if(val == 0) {
 		jump_forward();
 	}	
-
-	next();
 }
 
 void right_square(){
@@ -150,8 +145,6 @@ void right_square(){
 	if(val != 0) {
 		jump_back();
 	}
-
-	next();
 }
 
 // Cleanly exit
@@ -203,6 +196,8 @@ void interpret(char* source){
 
 	op_fin = generate_instr(cleanup);
 	
+	op_next = generate_instr(next);
+
 	// debug help
 	if(DEBUG) {
 		printf("Location of >: %p\n",move_right);
@@ -219,7 +214,7 @@ void interpret(char* source){
 	init_scanner(source);
 
 	prepare_exec();	
-	next();
+	write_instr(op_next);
 }
 
 static char* read_file(const char* path) {
@@ -244,6 +239,7 @@ static void run_file(char* path) {
 }
 
 // Creates a bunch of empty stack frames that we can destroy
+// Any more and we get a stack overflow
 void create_exec(int depth, char* path) {
 	if(depth == 0){
 		// Prepare exec	
@@ -251,12 +247,8 @@ void create_exec(int depth, char* path) {
 		exec = target;
 	
 		run_file(path);
-
-		// printf("Starting rop \n");
 		if (DEBUG) {printf(">> Returning to %p\n",  __builtin_return_address(0));}
 		sleep(0.5);
-
-		// Begin the rop
 	} else {
 		char space[800];
 		space[799] = 'c'; // Be absolutely sure that gcc won't optimize this out of existence

@@ -3,13 +3,19 @@
 #include <stdlib.h>
 #include<stdint.h>
 #include<math.h>
-#include<unistd.h>
+#include <stdbool.h>
+#include <unistd.h>
 
-#define DEBUG (1!=1)
+#include "scanner.h"
 
-int* stack = NULL;
+#define DEBUG true
+
+int* stack;
 int stack_size = 1;
 int stack_pos = 0;
+
+TokenType** bracket_stack;
+int bracket_stack_len = 0;
 
 char* exec;
 int exec_pos = 0;
@@ -20,30 +26,9 @@ char* op_inc;
 char* op_dec;
 char* op_out;
 char* op_in;
-
-void* reallocate(void* pointer, size_t old_size, size_t new_size) {
-	if(new_size == 0){
-		free(pointer);
-		return NULL;
-	}
-
-	return realloc(pointer, new_size);
-}
-
-
-// Yes this leaks memory, the program is going to segfault anyway, so who really cares
-void push(int val) {
-	if(stack_pos == stack_size){
-		stack = reallocate(stack, sizeof(int) * stack_size, sizeof(int) * (stack_size + 1) * 2);	
-		stack_size = (stack_size + 1) * 2;
-	}
-	stack[++stack_pos] = val;
-}
-
-int pop() {
-	int val = stack[stack_pos--];
-	return val;
-}
+char* op_lb;
+char* op_rb;
+char* op_fin;
 
 void print_stack() {
 	printf("\n> Stack{%d}:\n", stack_size);
@@ -54,18 +39,58 @@ void print_stack() {
 
 void print_ret() {
 	print_stack();
-	printf(">> Returning to %p\n",  __builtin_return_address(0));
+	printf(">> Returning to %p\n",  __builtin_return_address(2));
 }
 
+void write_instr(char* instr) {
+	debug_buf("next instr", instr, 8);
+	debug_buf("test", op_r, 8);
+	for(int i=0;i<8;i++) {
+		//printf("Writing %hhx to pos %d\n", instr[i], i+exec_pos);
+		exec[i + exec_pos] = instr[i];
+	}
+	exec_pos +=8;
+	debug();
+}
+
+void next() {
+	TokenType next_op = scan_token();
+	switch(next_op) {
+		case Token_R: 
+			write_instr(op_r); break;
+		case Token_L: 
+			write_instr(op_l); break;
+		case Token_Inc:
+		       printf("inc\n");	
+			write_instr(op_inc); break;
+		case Token_Dec: 
+			write_instr(op_dec); break;
+		case Token_Period: 
+			write_instr(op_out); break;
+		case Token_Comma: 
+			write_instr(op_in); break;
+		case Token_LB: 
+			write_instr(op_lb); break;
+		case Token_RB: 
+			write_instr(op_rb); break;
+		case Token_EOF: 
+			write_instr(op_fin); break;
+	}
+
+	if(DEBUG) { 
+		printf("Next: %d", next_op);
+		print_ret();	
+	}
+
+}
 
 // Instructions
 // =====
-
 void move_right() {
 	if(stack_pos + 1 == stack_size){
-		stack = reallocate(stack, sizeof(int) * stack_size, sizeof(int) * (stack_size + 1) * 2);
+		stack = realloc(stack, sizeof(int) * stack_size * 2);
 		stack[stack_pos + 1] = 0;	
-		stack_size = (stack_size + 1) * 2;
+		stack_size *= 2;
 	}
 
 	stack_pos++;
@@ -74,49 +99,53 @@ void move_right() {
 
 void move_left(){
 	stack_pos--;
-	if(DEBUG){ print_ret(); }
+	next();
 }
 
 void increment(){
 	stack[stack_pos]++;
-	if(DEBUG){ print_ret(); }
+	next();
 }
 
 void decrement(){
 	stack[stack_pos]--;
-	if(DEBUG){ print_ret(); }
+	next();
 }
 
 void output(){
 	int val = stack[stack_pos];
 	printf("%d",val);
 	
-	if(DEBUG){ print_ret(); }
+	next();
 }
 
 void input(){
 	int c = getchar();
 	stack[stack_pos] = c;	
-	if(DEBUG){ print_ret(); }
+	next();
 }
 
-// uhhhh i have no idea how control flow is going to work
-// I feel like jumping forward may be possible with an gadget that just pops return addresses off the stack
-// Jumping backwards seems to be impossible because once the return values are popped off, they're gone into the ether
-//
-// Maybe I could get it to work by collecting the instructions into a chunk, and then performing a rop for each new instruction
-// So each instruction would be
-// 1. Do something
-// 2. Get the next instruction from a chunk
-// 3. Overflow it onto exec
+void left_square(){
+	int val = stack[stack_pos];
+	if(val == 0) {
+		jump_forward();
+	}	
 
+	next();
+}
 
+void right_square(){
+	int val = stack[stack_pos];
+	if(val != 0) {
+		jump_back();
+	}
+	next();
+}
 
-// Helps make sure all prints are completed before the segfault happens
+// Cleanly exit
 void cleanup(){
-	printf("\n> Execution done \n");
-	sleep(1);
-	// print_ret();
+	if(DEBUG) {printf("\n> Execution done \n");};
+	exit(0);
 }
 
 char* generate_instr(void* fn_ptr){
@@ -127,7 +156,7 @@ char* generate_instr(void* fn_ptr){
 	for(int i = 0; i < n; i++, num /= 256 ) {
 		instr[i] = num % 256;
 	}
-	
+	debug_buf("generated", instr, 8);	
 	return instr;
 }
 
@@ -153,16 +182,7 @@ void prepare_exec() {
 	exec_pos = initial_smash;
 }
 
-void write_instr(char* instr) {
-	for(int i=0;i<8;i++) {
-		// printf("Writing %hhx to pos %d\n", instr[i], i+start_pos);
-		exec[i + exec_pos] = instr[i];
-	}
-	// debug(exec, start_pos + 8);
-	exec_pos +=8;
-}
-
-void compile(){
+void interpret(char* source){
 	// Initialize the stack
 	stack = malloc(sizeof(int));
 	stack[0] = 0;
@@ -174,23 +194,65 @@ void compile(){
 	op_dec = generate_instr(decrement);
 	op_out = generate_instr(output);
 	op_in = generate_instr(input);
+	op_rb = generate_instr(right_square);
+	op_lb = generate_instr(left_square);
 
-	char* op_cleanup = generate_instr(cleanup);
-	char op_fin[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+	op_fin = generate_instr(cleanup);
+	
+	// debug help
+	if(DEBUG) {
+		printf("Location of >: %p\n",move_right);
+		printf("Location of <: %p\n",move_left);
+		printf("Location of +: %p\n",increment);
+		printf("Location of -: %p\n",decrement);
+		printf("Location of .: %p\n",output);
+		printf("Location of ,: %p\n",input);
+		printf("Location of [: %p\n",left_square);
+		printf("Location of ]: %p\n",right_square);
+	}
 
-	// Begin "compilation"	
-	prepare_exec();
-	write_instr(op_in);
-	write_instr(op_inc);
-	write_instr(op_out);
+	// Initialize the scanner
+	init_scanner(source);
 
-	write_instr(op_cleanup);
-	write_instr(op_fin);
+	prepare_exec();	
+	next();
 }
 
-int main() {
+static char* read_file(const char* path) {
+	FILE* file = fopen(path, "rb");
+	
+	fseek(file, 0L, SEEK_END);
+	size_t fileSize = ftell(file);
+	rewind(file);
+	
+	char* buffer = (char*)malloc(fileSize + 1);
+	size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
+	buffer[bytesRead] = '\0';
+
+	fclose(file);
+	return buffer;
+}
+
+static void run_file(char* path) {
+	char* source = read_file(path);
+	printf("Source: %s", source);
+	interpret(source);
+}
+
+int main(int argc, char* argv[]) {
+	// Prepare exec	
 	char target[0]; // Our rop target
 	exec = target;
-	compile();
-	if(DEBUG){ print_ret(); }
+
+	if(argc == 2) {
+		run_file(argv[1]);
+	} else {
+		fprintf(stderr, "Usage: rop [path] \n");
+		exit(64);
+	}
+	
+	printf("Starting rop \n");
+	printf(">> Returning to %p\n",  __builtin_return_address(0));
+	sleep(0.5);
+	// Begin the rop
 }

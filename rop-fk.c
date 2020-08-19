@@ -1,8 +1,8 @@
-#include<stdio.h>
-#include<string.h>
+#include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
-#include<stdint.h>
-#include<math.h>
+#include <stdint.h>
+#include <math.h>
 #include <stdbool.h>
 #include <unistd.h>
 
@@ -13,9 +13,6 @@
 int* stack;
 int stack_size = 1;
 int stack_pos = 0;
-
-TokenType** bracket_stack;
-int bracket_stack_len = 0;
 
 char* exec;
 int exec_pos = 0;

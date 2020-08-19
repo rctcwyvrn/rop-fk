@@ -21,4 +21,6 @@ The answer is that otherwise something gets corrupted and the code outputs garba
 
 Why? I have literally no idea.
 
-The code will execute correctly under `gdb` and the `rop.sh` script, but not directly (`./rop-fk [script]`). Why? I have no idea
+The code will execute correctly under `rop.sh` script, but not directly (`./rop-fk [script]`). Why? I have no idea.
+
+Sometimes the code will not segfault with gdb, but segfault when running it directly. Why? I have no idea.

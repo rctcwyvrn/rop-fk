@@ -4,14 +4,69 @@
 #include<stdint.h>
 #include<math.h>
 
-void print_hi() {
-	printf("Hi\n");
+int* stack = NULL;
+int stack_size = 0;
+int stack_pos = 0;
+
+void* reallocate(void* pointer, size_t old_size, size_t new_size) {
+	if(new_size == 0){
+		free(pointer);
+		return NULL;
+	}
+
+	return realloc(pointer, new_size);
+}
+
+// Yes this leaks memory, the program is going to segfault anyway, so who really cares
+void push(int val) {
+	if(stack_pos == stack_size){
+		stack = reallocate(stack, sizeof(int) * stack_size, sizeof(int) * (stack_size + 1) * 2);	
+		stack_size = (stack_size + 1) * 2;
+	}
+	stack[++stack_pos] = val;
+}
+
+int pop() {
+	int val = stack[stack_pos--];
+	return val;
+}
+
+void print_stack() {
+	printf("> Stack:\n");
+	for(int i = 0; i<stack_pos; i++) {
+		printf(">> [%d] = %d\n", i, stack[stack_pos]);
+	}
+}
+
+void print_ret() {
+	print_stack();
 	printf(">> Returning to %p\n",  __builtin_return_address(0));
 }
 
+// Pushes 1 onto the stack
+void push_one() {
+	push(1);
+	print_ret();
+}
+
+// Pops two and adds them
+void add() {
+	int x = pop();
+	int y = pop();
+	push(x+y);
+	print_ret();
+}
+
+// Just says hi
+void print_hi() {
+	printf("Hi\n");
+	print_ret();
+}
+
+// Pops a value and says bye to it
 void print_bye() {
-	printf("Bye~\n");
-	printf(">> Returning to %p\n",  __builtin_return_address(0));
+	printf("Bye %d~\n", pop());
+	print_ret();
 }
 
 char* generate_instr(void* fn_ptr){
@@ -61,16 +116,25 @@ void compile(char* exec) {
 	printf("Location of print_hi %p\n", print_hi);
 	printf("Location of print_bye %p\n", print_bye);
 
-	char* print_hi_instr = generate_instr(print_hi);
-	char* print_bye_instr = generate_instr(print_bye);
+	char* op_hi = generate_instr(print_hi);
+	char* op_bye = generate_instr(print_bye);
+	char* op_add = generate_instr(add);
+	char* op_one = generate_instr(push_one);
 
-	debug_buf("print_hi_instr", print_hi_instr, 8);
-	debug_buf("print_bye_instr", print_bye_instr, 8);
+	//debug_buf("print_hi_instr", print_hi_instr, 8);
+	//debug_buf("print_bye_instr", print_bye_instr, 8);
 
 	// Begin "compilation"	
 	int start = prepare_exec(exec);
-	start = write_instr(exec, print_hi_instr, start);	
-	start = write_instr(exec, print_bye_instr, start);
+
+	start = write_instr(exec, op_hi, start);
+	start = write_instr(exec, op_one, start);
+	start = write_instr(exec, op_one, start);
+	start = write_instr(exec, op_add, start);
+	start = write_instr(exec, op_bye, start);
+
+	//start = write_instr(exec, print_hi_instr, start);	
+	//start = write_instr(exec, print_bye_instr, start);
 }
 
 int main() {

@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS="-fno-stack-protector" "-no-pie" "-lm"
 
 rop: clean
-	$(CC) -g -o rop rop-lang.c scanner.c $(CFLAGS)
+	$(CC) -g -o rop-fk *.c $(CFLAGS)
 
 clean:
-	rm -f rop
+	rm -f rop-fk

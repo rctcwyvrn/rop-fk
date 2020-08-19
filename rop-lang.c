@@ -8,7 +8,7 @@
 
 #include "scanner.h"
 
-#define DEBUG true
+#define DEBUG false
 
 int* stack;
 int stack_size = 1;
@@ -30,8 +30,22 @@ char* op_lb;
 char* op_rb;
 char* op_fin;
 
+void debug_buf(char* name, char* exec, int len) {
+	printf("%s: [", name);
+	for(int i=0;i<len; i++){
+		printf("%hhx", exec[i]);
+	}
+	printf("] | cur_len = %d\n", len);
+
+}
+
+void debug() {
+	debug_buf("exec", exec, exec_pos);
+}
+
+
 void print_stack() {
-	printf("\n> Stack{%d}:\n", stack_size);
+	printf("\n> Stack{%d}:\n", stack_pos);
 	for(int i = 0; i<stack_size; i++) {
 		printf(">> [%d] = %d\n", i, stack[i]);
 	}
@@ -43,14 +57,15 @@ void print_ret() {
 }
 
 void write_instr(char* instr) {
-	debug_buf("next instr", instr, 8);
-	debug_buf("test", op_r, 8);
 	for(int i=0;i<8;i++) {
 		//printf("Writing %hhx to pos %d\n", instr[i], i+exec_pos);
 		exec[i + exec_pos] = instr[i];
 	}
 	exec_pos +=8;
-	debug();
+	if (DEBUG) { 
+		// debug_buf("next instr", instr, 8); 
+		// debug();
+	}
 }
 
 void next() {
@@ -60,8 +75,7 @@ void next() {
 			write_instr(op_r); break;
 		case Token_L: 
 			write_instr(op_l); break;
-		case Token_Inc:
-		       printf("inc\n");	
+		case Token_Inc:;	
 			write_instr(op_inc); break;
 		case Token_Dec: 
 			write_instr(op_dec); break;
@@ -94,7 +108,7 @@ void move_right() {
 	}
 
 	stack_pos++;
-	if(DEBUG){ print_ret(); }
+	next();
 }
 
 void move_left(){
@@ -114,8 +128,8 @@ void decrement(){
 
 void output(){
 	int val = stack[stack_pos];
-	printf("%d",val);
-	
+	printf("%c", (char) val);
+	// printf("Out: %d\n", val);
 	next();
 }
 
@@ -139,38 +153,31 @@ void right_square(){
 	if(val != 0) {
 		jump_back();
 	}
+
 	next();
 }
 
 // Cleanly exit
 void cleanup(){
-	if(DEBUG) {printf("\n> Execution done \n");};
+	printf("\n> Execution done \n");
 	exit(0);
 }
 
 char* generate_instr(void* fn_ptr){
 	unsigned int num = (uintptr_t) fn_ptr;
+	//int num = (int) fn_ptr;
 	int n = (int) floor(log(num)/log(256)) + 1;
-	char* instr = malloc(n*sizeof(char));
+	char* instr = malloc(8*sizeof(char));
 
 	for(int i = 0; i < n; i++, num /= 256 ) {
 		instr[i] = num % 256;
+		//printf("Just put %hhx onto the instr\n", num % 256);
 	}
-	debug_buf("generated", instr, 8);	
+	for(int i = n; i < 8; i++) {
+		instr[i] = 0; // Zero out the rest of the instr
+	}
+	//debug_buf("generated", instr, 8);	
 	return instr;
-}
-
-void debug_buf(char* name, char* exec, int len) {
-	printf("%s: [", name);
-	for(int i=0;i<len; i++){
-		printf("%hhx", exec[i]);
-	}
-	printf("] | cur_len = %d\n", len);
-
-}
-
-void debug() {
-	debug_buf("exec", exec, exec_pos);
 }
 
 void prepare_exec() {
@@ -239,20 +246,31 @@ static void run_file(char* path) {
 	interpret(source);
 }
 
-int main(int argc, char* argv[]) {
-	// Prepare exec	
-	char target[0]; // Our rop target
-	exec = target;
+// Creates a bunch of empty stack frames that we can destroy
+void create_exec(int depth, char* path) {
+	if(depth == 0){
+		// Prepare exec	
+		char target[0]; // Our rop target
+		exec = target;
+	
+		run_file(path);
 
+		printf("Starting rop \n");
+		if (DEBUG) {printf(">> Returning to %p\n",  __builtin_return_address(0));}
+		sleep(0.5);
+
+		// Begin the rop
+	} else {
+		char space[800];
+		create_exec(depth - 1, path);
+	}
+}
+
+int main(int argc, char* argv[]) {
 	if(argc == 2) {
-		run_file(argv[1]);
+		create_exec(10, argv[1]);
 	} else {
 		fprintf(stderr, "Usage: rop [path] \n");
 		exit(64);
 	}
-	
-	printf("Starting rop \n");
-	printf(">> Returning to %p\n",  __builtin_return_address(0));
-	sleep(0.5);
-	// Begin the rop
 }

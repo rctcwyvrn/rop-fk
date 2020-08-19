@@ -1,10 +1,10 @@
 rop-fk
 ---
-Taking return oriented programming a bit too literally..
+Taking return oriented programming a bit too literally.
 
 What is this cursed creation? It's a brainfuck interpreter, except each instruction is "interpreted" by adding a return address to a smashed stack buffer. It manages to run and gracefully exit, with only some extremely bizarre memory corruption issues sometimes.
 
-It correctly runs hello world, which means it's good enough for me.
+It correctly runs hello world, which means it's good enough for me. It's also a very very precariously balanced pile of memory corruption, so lots of seemingly insignificant changes can easily break the code. For example, removing some of the print statements from before the code executes causes the output to be mangled. Why? I have no clue
 
 Usage
 ---

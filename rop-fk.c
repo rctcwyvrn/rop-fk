@@ -255,7 +255,7 @@ void create_exec(int depth, char* path) {
 	
 		run_file(path);
 
-		printf("Starting rop \n");
+		// printf("Starting rop \n");
 		if (DEBUG) {printf(">> Returning to %p\n",  __builtin_return_address(0));}
 		sleep(0.5);
 

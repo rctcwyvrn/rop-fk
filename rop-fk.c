@@ -262,13 +262,14 @@ void create_exec(int depth, char* path) {
 		// Begin the rop
 	} else {
 		char space[800];
+		space[799] = 'c'; // Be absolutely sure that gcc won't optimize this out of existence
 		create_exec(depth - 1, path);
 	}
 }
 
 int main(int argc, char* argv[]) {
 	if(argc == 2) {
-		create_exec(10, argv[1]);
+		create_exec(10000, argv[1]);
 	} else {
 		fprintf(stderr, "Usage: rop [path] \n");
 		exit(64);

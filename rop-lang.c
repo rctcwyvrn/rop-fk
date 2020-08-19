@@ -3,12 +3,23 @@
 #include <stdlib.h>
 #include<stdint.h>
 #include<math.h>
+#include<unistd.h>
 
 #define DEBUG (1!=1)
 
 int* stack = NULL;
 int stack_size = 1;
 int stack_pos = 0;
+
+char* exec;
+int exec_pos = 0;
+
+char* op_r; 
+char* op_l;
+char* op_inc;
+char* op_dec;
+char* op_out;
+char* op_in;
 
 void* reallocate(void* pointer, size_t old_size, size_t new_size) {
 	if(new_size == 0){
@@ -104,6 +115,7 @@ void input(){
 // Helps make sure all prints are completed before the segfault happens
 void cleanup(){
 	printf("\n> Execution done \n");
+	sleep(1);
 	// print_ret();
 }
 
@@ -128,61 +140,57 @@ void debug_buf(char* name, char* exec, int len) {
 
 }
 
-void debug(char* exec, int len) {
-	debug_buf("exec", exec, len);
+void debug() {
+	debug_buf("exec", exec, exec_pos);
 }
 
-int prepare_exec(char* exec) {
-	int initial_run = 8;
-	for(int i=0; i<initial_run; i++) {
+void prepare_exec() {
+	int initial_smash = 8;
+	for(int i=0; i<initial_smash; i++) {
 		exec[i] = 0x41; // Overflow some stack 
 	}
 	// debug(exec, initial_run);
-	return initial_run;
+	exec_pos = initial_smash;
 }
 
-int write_instr(char* exec, char* instr, int start_pos) {
+void write_instr(char* instr) {
 	for(int i=0;i<8;i++) {
 		// printf("Writing %hhx to pos %d\n", instr[i], i+start_pos);
-		exec[i + start_pos] = instr[i];
+		exec[i + exec_pos] = instr[i];
 	}
 	// debug(exec, start_pos + 8);
-	return start_pos + 8;
+	exec_pos +=8;
 }
 
-void compile(char* exec) {
-	char* op_r = generate_instr(move_right);
-	char* op_l = generate_instr(move_left);
-	char* op_inc = generate_instr(increment);
-	char* op_dec = generate_instr(decrement);
-	char* op_out = generate_instr(output);
-	char* op_in = generate_instr(input);
-
-	char* op_cleanup = generate_instr(cleanup);
-	char op_fin[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-	//printf("Location of inc %p\n", increment);
-	//printf("Location of in %p\n", input);
-
-	//debug_buf("op_in", op_in, 8);
-	//debug_buf("op_inc", op_inc, 8);
-
+void compile(){
 	// Initialize the stack
 	stack = malloc(sizeof(int));
 	stack[0] = 0;
 
-	// Begin "compilation"	
-	int start = prepare_exec(exec);
-	start = write_instr(exec, op_in, start);
-	start = write_instr(exec, op_inc, start);
-	start = write_instr(exec, op_out, start);
+	// Initialize the opcodes
+	op_r = generate_instr(move_right);
+	op_l = generate_instr(move_left);
+	op_inc = generate_instr(increment);
+	op_dec = generate_instr(decrement);
+	op_out = generate_instr(output);
+	op_in = generate_instr(input);
 
-	start = write_instr(exec, op_cleanup, start);
-	start = write_instr(exec, op_fin, start);
+	char* op_cleanup = generate_instr(cleanup);
+	char op_fin[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+	// Begin "compilation"	
+	prepare_exec();
+	write_instr(op_in);
+	write_instr(op_inc);
+	write_instr(op_out);
+
+	write_instr(op_cleanup);
+	write_instr(op_fin);
 }
 
 int main() {
-	char exec[0]; // Our rop target
-	compile(exec);
+	char target[0]; // Our rop target
+	exec = target;
+	compile();
 	if(DEBUG){ print_ret(); }
 }
